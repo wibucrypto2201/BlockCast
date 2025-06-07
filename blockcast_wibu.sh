@@ -32,16 +32,11 @@ else
     echo "✅ beacon-docker-compose repository already exists."
 fi
 
-# 4️⃣ Check proxy.txt trước khi cd
-if [ -f "../proxy.txt" ]; then
-    echo "✅ Found proxy.txt in the parent folder. Copying to beacon-docker-compose..."
-    cp ../proxy.txt ./beacon-docker-compose/proxy.txt
-elif [ -f "proxy.txt" ]; then
-    echo "✅ proxy.txt already in beacon-docker-compose folder."
-elif [ -f "./beacon-docker-compose/proxy.txt" ]; then
-    echo "✅ proxy.txt already exists in beacon-docker-compose folder."
+# 4️⃣ Kiểm tra proxy.txt ở thư mục gốc
+if [ -f "proxy.txt" ]; then
+    echo "✅ Found proxy.txt in the main folder."
 else
-    echo "❌ proxy.txt not found! Please put proxy.txt in either the main folder or in beacon-docker-compose."
+    echo "❌ proxy.txt not found in the main folder! Please create proxy.txt with format user:pass@ip:port (1 per line)."
     exit 1
 fi
 
@@ -51,13 +46,13 @@ cd beacon-docker-compose || exit 1
 # 6️⃣ Input số lượng container
 read -p "⛓️  Enter the number of containers you want to run: " container_count
 
-# 7️⃣ Đọc proxy từ file proxy.txt
-if [ ! -f "proxy.txt" ]; then
-    echo "❌ proxy.txt not found inside beacon-docker-compose!"
+# 7️⃣ Đọc proxy từ file ../proxy.txt (vẫn nằm ở main folder)
+if [ ! -f "../proxy.txt" ]; then
+    echo "❌ proxy.txt not found in the main folder!"
     exit 1
 fi
 
-mapfile -t proxies < proxy.txt
+mapfile -t proxies < ../proxy.txt
 
 echo "🔎 Found ${#proxies[@]} proxies."
 printf '%s\n' "${proxies[@]}"
