@@ -2,8 +2,7 @@
 
 # blockcast_wibu.sh
 # Author: Grimoire+ (OpenAI)
-# Description: Clone repo, pull, up container, get register URL + location
-#              và xuất ra blockcast_data.txt với format: register_url|location
+# Description: Clone toàn bộ repo, up toàn bộ container, sau đó mới bắt đầu exec lấy data để đảm bảo tuần tự theo proxy.txt.
 
 REPO_URL="https://github.com/wibucrypto2201/beacon-docker-compose.git"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -17,34 +16,37 @@ fi
 
 echo "" > "${OUTPUT_FILE}"   # Clear output file
 
-# 2️⃣ Phase 1: Setup container
+# 2️⃣ Phase 1: Clone repo + up container
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     host_port=$((8000 + instance_id))
     project_name="blockcast_${instance_id}"
     repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
 
-    echo "🔎 [Instance ${instance_id}] Đang setup container..."
+    echo "🔎 [Instance ${instance_id}] Bắt đầu setup container..."
 
     # Clone repo
     if [ -d "${repo_dir}" ]; then
         echo "⚠️  [Instance ${instance_id}] Repo đã tồn tại — đang xóa để clone lại..."
         rm -rf "${repo_dir}"
     fi
-    git clone "$REPO_URL" "${repo_dir}"
+    git clone "$REPO_URL" "${repo_dir}" > /dev/null 2>&1
+    echo "✅ [Instance ${instance_id}] Clone xong!"
 
     cd "${repo_dir}" || exit 1
 
+    # Pull image
     echo "🔄 [Instance ${instance_id}] Pulling latest images..."
-    docker compose pull
+    docker compose pull > /dev/null 2>&1
 
+    # Up container
     echo "🚀 [Instance ${instance_id}] Starting container..."
     INSTANCE_ID=$instance_id \
     PROXY_AUTH=$proxy_line \
     HOST_PORT=$host_port \
-    docker compose -p "${project_name}" up -d
+    docker compose -p "${project_name}" up -d > /dev/null 2>&1
 
-    echo "✅ [Instance ${instance_id}] Container setup done!"
+    echo "✅ [Instance ${instance_id}] Container đã khởi chạy!"
     echo "-----------------------------"
 
     cd "${SCRIPT_DIR}" || exit 1
@@ -52,9 +54,9 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 done < "${SCRIPT_DIR}/proxy.txt"
 
 echo "⏳ Đang chờ tất cả container khởi chạy hoàn tất..."
-sleep 10  # Để container ổn định
+sleep 10  # Cho container ổn định
 
-# 3️⃣ Phase 2: Get register URL + location
+# 3️⃣ Phase 2: Lấy register URL + location theo đúng proxy.txt
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     project_name="blockcast_${instance_id}"
