@@ -10,13 +10,13 @@ fi
 
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
-    proxy_port=$(echo "$proxy_line" | awk -F':' '{print $NF}')
+    host_port=$((8000 + instance_id))   # Sử dụng port 8001, 8002, ...
     project_name="blockcast_${instance_id}"
     repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
 
     # Kiểm tra port đã bị chiếm chưa
-    if lsof -i :"${proxy_port}" >/dev/null 2>&1; then
-        echo "❌ Port ${proxy_port} đã bị chiếm. Bỏ qua container ${instance_id}."
+    if lsof -i :"${host_port}" >/dev/null 2>&1; then
+        echo "❌ Port ${host_port} đã bị chiếm. Bỏ qua container ${instance_id}."
         ((instance_id++))
         continue
     fi
@@ -29,13 +29,13 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     git clone "$REPO_URL" "${repo_dir}"
     cd "${repo_dir}" || exit 1
 
-    echo "🟢 Starting container_${instance_id} with proxy: ${proxy_line} on port ${proxy_port} (Project: ${project_name})"
+    echo "🟢 Starting container_${instance_id} with proxy: ${proxy_line} on port ${host_port} (Project: ${project_name})"
 
     docker compose pull
 
     INSTANCE_ID=$instance_id \
     PROXY_AUTH=$proxy_line \
-    HOST_PORT=$proxy_port \
+    HOST_PORT=$host_port \
     docker compose -p "${project_name}" up -d
 
     ((instance_id++))
