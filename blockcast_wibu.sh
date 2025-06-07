@@ -40,6 +40,7 @@ yes | sudo apt-get update
 install_if_missing ca-certificates
 install_if_missing curl
 install_if_missing gnupg
+install_if_missing jq
 
 sudo install -m 0755 -d /etc/apt/keyrings
 
@@ -88,6 +89,7 @@ max_containers=${max_containers:-9999}
 # === Bước 9: Generate docker-compose.generated.yml ===
 INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
+rm -f ../container_data.txt
 
 echo "version: '3.8'" > $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
@@ -125,6 +127,9 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
+    # Ghi container_name + proxy_line vào container_data.txt (sẽ bổ sung location sau)
+    echo "$container_name|$proxy_line" >> ../container_data.txt
+
     counter=$((counter + 1))
 done < "$INPUT_FILE"
 
@@ -144,4 +149,36 @@ echo "✅ Đã generate $OUTPUT_FILE thành công!"
 docker compose -f docker-compose.generated.yml up -d
 
 echo "=============================="
-echo "Tất cả containers đã được khởi chạy từ docker-compose.generated.yml!"
+echo "Containers đang chạy. Bắt đầu chạy blockcastd init cho từng container..."
+
+# === Bước 11: Init và lấy location ===
+counter=1
+while IFS="|" read -r container_name proxy_line; do
+    echo "=============================="
+    echo "Khởi tạo: $container_name"
+    echo "Proxy: $proxy_line"
+    echo "=============================="
+
+    # Chạy blockcastd init
+    docker compose -f docker-compose.generated.yml exec -T $container_name /usr/bin/blockcastd init || echo "blockcastd init failed"
+
+    # Lấy location thông qua proxy
+    username=$(echo "$proxy_line" | cut -d':' -f1)
+    pass_ip_port=$(echo "$proxy_line" | cut -d':' -f2-)
+    password=$(echo "$pass_ip_port" | cut -d'@' -f1)
+    ip_port=$(echo "$pass_ip_port" | cut -d'@' -f2)
+    ip=$(echo "$ip_port" | cut -d':' -f1)
+    port=$(echo "$ip_port" | cut -d':' -f2)
+
+    location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
+        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
+        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
+
+    # Cập nhật dữ liệu container_data.txt
+    echo "$container_name|$proxy_line|$location" >> ../container_data.txt
+
+    counter=$((counter + 1))
+done < ../container_data.txt
+
+echo "=============================="
+echo "Hoàn tất! Thông tin đã được lưu vào container_data.txt"
