@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Xác định thư mục chứa script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # 1️⃣ Update và cài dependencies
 echo "👉 Updating system and installing dependencies (non-interactive)..."
 sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -yq
@@ -25,23 +28,23 @@ else
 fi
 
 # 3️⃣ Clone repository nếu chưa tồn tại
-if [ ! -d "beacon-docker-compose" ]; then
+if [ ! -d "$SCRIPT_DIR/beacon-docker-compose" ]; then
     echo "📥 Cloning beacon-docker-compose repository..."
-    git clone https://github.com/Blockcast/beacon-docker-compose.git
+    git clone https://github.com/Blockcast/beacon-docker-compose.git "$SCRIPT_DIR/beacon-docker-compose"
 else
     echo "✅ beacon-docker-compose repository already exists."
 fi
 
-# 4️⃣ Kiểm tra proxy.txt ở thư mục chính
-if [ -f "proxy.txt" ]; then
-    echo "✅ Found proxy.txt in the main folder."
+# 4️⃣ Kiểm tra proxy.txt ở thư mục script
+if [ -f "$SCRIPT_DIR/proxy.txt" ]; then
+    echo "✅ Found proxy.txt in the script folder."
 else
-    echo "❌ proxy.txt not found in the main folder! Please create proxy.txt with format user:pass@ip:port (1 per line)."
+    echo "❌ proxy.txt not found in the script folder! Please create proxy.txt with format user:pass@ip:port (1 per line)."
     exit 1
 fi
 
 # 5️⃣ Đọc proxy từ file proxy.txt
-mapfile -t proxies < proxy.txt
+mapfile -t proxies < "$SCRIPT_DIR/proxy.txt"
 
 echo "🔎 Found ${#proxies[@]} proxies."
 printf '%s\n' "${proxies[@]}"
@@ -55,22 +58,22 @@ if [ "${#proxies[@]}" -lt "$container_count" ]; then
 fi
 
 # 7️⃣ cd vào thư mục repo
-cd beacon-docker-compose || exit 1
+cd "$SCRIPT_DIR/beacon-docker-compose" || exit 1
 
-# 8️⃣ Tự động comment hoặc xoá container_name để tránh conflict
-if grep -q 'container_name: blockcastd' docker-compose.yml; then
-    echo "⚡ Removing 'container_name: blockcastd' from docker-compose.yml to avoid conflict."
-    sed -i '/container_name: blockcastd/s/^/# /' docker-compose.yml
-else
-    echo "✅ No 'container_name: blockcastd' found — no change needed."
-fi
-
-# 9️⃣ Tải và chạy blockcast_wibu.sh (wget)
+# 8️⃣ Tải và chạy blockcast_wibu.sh (wget)
 echo "⚡ Downloading and running blockcast_wibu.sh..."
 wget -qO- https://raw.githubusercontent.com/wibucrypto2201/BlockCast/refs/heads/main/blockcast_wibu.sh | bash
 
+# 9️⃣ Xoá tất cả container_name để tránh conflict
+if grep -q 'container_name:' docker-compose.yml; then
+    echo "⚡ Removing all 'container_name:' entries from docker-compose.yml to avoid conflict."
+    sed -i '/container_name:/d' docker-compose.yml
+else
+    echo "✅ No 'container_name:' found — no change needed."
+fi
+
 # 🔟 Tạo và chạy container
-output_file="../container_data.txt"
+output_file="$SCRIPT_DIR/container_data.txt"
 echo "" > "$output_file"  # Clear output
 
 for ((i=1; i<=container_count; i++)); do
