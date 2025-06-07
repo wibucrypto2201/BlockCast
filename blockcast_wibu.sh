@@ -1,25 +1,18 @@
 #!/bin/bash
 
-# blockcast_wibu.sh
-# Author: Grimoire+ (OpenAI)
-# Description: Clone repo, up container và lấy register URL + location theo đúng proxy.txt
-
 REPO_URL="https://github.com/wibucrypto2201/beacon-docker-compose.git"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 OUTPUT_FILE="${SCRIPT_DIR}/blockcast_data.txt"
 
-set +e  # Không dừng script khi lỗi
+set +e
 
-# Kiểm tra proxy.txt
 if [ ! -f "${SCRIPT_DIR}/proxy.txt" ]; then
     echo "❌ proxy.txt không tìm thấy!"
     exit 1
 fi
 
-# Dọn file dữ liệu cũ
 echo "" > "${OUTPUT_FILE}"
 
-# Phase 1: Clone + Pull + Up container
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     host_port=$((8000 + instance_id))
@@ -29,11 +22,9 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     echo "🔎 [Instance ${instance_id}] Setup container..."
 
     if [ -d "${repo_dir}" ]; then
-        echo "⚠️  Repo ${repo_dir} đã tồn tại — đang xóa..."
         rm -rf "${repo_dir}"
     fi
     git clone "$REPO_URL" "${repo_dir}" > /dev/null 2>&1
-    echo "✅ [Instance ${instance_id}] Repo cloned!"
 
     cd "${repo_dir}" || continue
 
@@ -54,9 +45,8 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 done < "${SCRIPT_DIR}/proxy.txt"
 
 echo "⏳ Waiting for containers to fully initialize..."
-sleep 20  # Tăng thời gian nếu container khởi động chậm
+sleep 20
 
-# Phase 2: Exec command để lấy register_url và location
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     project_name="blockcast_${instance_id}"
@@ -68,14 +58,12 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     if [ -d "${repo_dir}" ]; then
         cd "${repo_dir}" || continue
 
-        # Check container đang chạy
         container_status=$(docker compose -p "${project_name}" ps blockcastd | grep "running")
         if [ -n "$container_status" ]; then
             echo "🔗 [Instance ${instance_id}] Getting register URL..."
             for attempt in {1..5}; do
                 register_url=$(docker compose -p "${project_name}" \
-                    exec -T blockcastd \
-                    bash -c "blockcastd init" 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
+                    exec -T blockcastd bash -c "blockcastd init" 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
                 if [ -n "$register_url" ]; then
                     break
                 fi
@@ -87,8 +75,7 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
             echo "🌍 [Instance ${instance_id}] Getting location info..."
             for attempt in {1..5}; do
                 location=$(docker compose -p "${project_name}" \
-                    exec -T blockcastd \
-                    bash -c "curl -s https://ipinfo.io" | jq -r '[.city, .region, .country, .loc] | join(\", \")' 2>/dev/null)
+                    exec -T blockcastd bash -c "curl -s https://ipinfo.io" | jq -r '[.city, .region, .country, .loc] | join(\", \")' 2>/dev/null)
                 if [ -n "$location" ]; then
                     break
                 fi
@@ -98,10 +85,10 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
             [ -z "$location" ] && location="ERROR"
         else
             echo "⚠️  [Instance ${instance_id}] blockcastd container không chạy!"
+            docker compose -p "${project_name}" logs --tail=20 blockcastd
         fi
     fi
 
-    # Ghi ra file
     echo "${register_url}|${location}" >> "${OUTPUT_FILE}"
 
     echo "✅ [Instance ${instance_id}] Done:"
