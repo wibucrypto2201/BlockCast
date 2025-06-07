@@ -89,7 +89,9 @@ max_containers=${max_containers:-9999}
 # === Bước 9: Generate docker-compose.generated.yml ===
 INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
-> ../container_data_tmp.txt  # clear file tạm
+
+# Clear file tạm container_data_tmp.txt
+rm -f ../container_data_tmp.txt
 
 echo "services:" > $OUTPUT_FILE
 
@@ -125,6 +127,7 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
+    # Append container_name và proxy_line để đảm bảo tất cả container được lưu
     echo "$container_name|$proxy_line" >> ../container_data_tmp.txt
 
     counter=$((counter + 1))
@@ -149,7 +152,7 @@ echo "=============================="
 echo "Containers đang chạy. Bắt đầu chạy blockcastd init cho từng container..."
 
 # === Bước 11: Init, lấy Register URL và location từ proxy ===
-rm -f ../container_data.txt  # Clear file để ghi kết quả cuối
+rm -f ../container_data.txt  # Clear file kết quả cuối
 
 while IFS="|" read -r container_name proxy_line; do
     echo "=============================="
@@ -165,7 +168,7 @@ while IFS="|" read -r container_name proxy_line; do
     ip=$(echo "$ip_port" | cut -d':' -f1)
     port=$(echo "$ip_port" | cut -d':' -f2)
 
-    # Chạy blockcastd init (container sẽ dùng HTTP_PROXY đã set nếu app support)
+    # Chạy blockcastd init (container sẽ tự dùng HTTP_PROXY nếu app support)
     init_output=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
         /usr/bin/blockcastd init 2>&1) || echo "blockcastd init failed"
 
