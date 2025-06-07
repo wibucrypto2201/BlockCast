@@ -32,7 +32,7 @@ else
     echo "✅ beacon-docker-compose repository already exists."
 fi
 
-# 4️⃣ Kiểm tra proxy.txt ở thư mục gốc
+# 4️⃣ Kiểm tra proxy.txt ở thư mục chính
 if [ -f "proxy.txt" ]; then
     echo "✅ Found proxy.txt in the main folder."
 else
@@ -40,27 +40,22 @@ else
     exit 1
 fi
 
-# 5️⃣ cd vào thư mục repo
-cd beacon-docker-compose || exit 1
-
-# 6️⃣ Input số lượng container
-read -p "⛓️  Enter the number of containers you want to run: " container_count
-
-# 7️⃣ Đọc proxy từ file ../proxy.txt (vẫn nằm ở main folder)
-if [ ! -f "../proxy.txt" ]; then
-    echo "❌ proxy.txt not found in the main folder!"
-    exit 1
-fi
-
-mapfile -t proxies < ../proxy.txt
+# 5️⃣ Đọc proxy từ file proxy.txt
+mapfile -t proxies < proxy.txt
 
 echo "🔎 Found ${#proxies[@]} proxies."
 printf '%s\n' "${proxies[@]}"
+
+# 6️⃣ Input số lượng container
+read -p "⛓️  Enter the number of containers you want to run: " container_count
 
 if [ "${#proxies[@]}" -lt "$container_count" ]; then
     echo "❌ Not enough proxies in proxy.txt! Found ${#proxies[@]}, need $container_count."
     exit 1
 fi
+
+# 7️⃣ cd vào thư mục repo
+cd beacon-docker-compose || exit 1
 
 # 8️⃣ Tải và chạy blockcast_wibu.sh (wget)
 echo "⚡ Downloading and running blockcast_wibu.sh..."
@@ -81,9 +76,11 @@ for ((i=1; i<=container_count; i++)); do
 
     echo "🚀 Starting container $container_name with proxy $proxy..."
 
-    docker compose -p "$container_name" up -d --build \
-        --env HTTP_PROXY="http://$username:$password@$ip_port" \
-        --env HTTPS_PROXY="http://$username:$password@$ip_port"
+    (
+        export HTTP_PROXY="http://$username:$password@$ip_port"
+        export HTTPS_PROXY="http://$username:$password@$ip_port"
+        docker compose -p "$container_name" up -d --build
+    )
 
     echo "⚡ Waiting a few seconds for container $container_name to initialize..."
     sleep 10
