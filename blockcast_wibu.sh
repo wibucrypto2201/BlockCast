@@ -104,8 +104,8 @@ for ((i=1; i<=container_count; i++)); do
         register_url="N/A"
     fi
 
-    echo "🌐 Fetching location info..."
-    location_info=$(curl -s https://ipinfo.io | jq -r '.city, .region, .country, .loc' | paste -sd ", ")
+    echo "🌐 Fetching location info from container $container_name..."
+    location_info=$(docker compose -p "$container_name" exec -T blockcastd curl -s https://ipinfo.io | jq -r '.city, .region, .country, .loc' | paste -sd ", ")
 
     if [ -z "$location_info" ]; then
         location_info="N/A"
