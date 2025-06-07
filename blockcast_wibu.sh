@@ -91,9 +91,7 @@ INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
 rm -f ../container_data.txt
 
-echo "version: '3.8'" > $OUTPUT_FILE
-echo "" >> $OUTPUT_FILE
-echo "services:" >> $OUTPUT_FILE
+echo "services:" > $OUTPUT_FILE
 
 counter=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
@@ -127,13 +125,13 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
-    # Ghi container_name + proxy_line vào container_data.txt (sẽ bổ sung location sau)
+    # Ghi container_name + proxy_line để bước sau init
     echo "$container_name|$proxy_line" >> ../container_data.txt
 
     counter=$((counter + 1))
 done < "$INPUT_FILE"
 
-# === Thêm service watchtower vào file YAML ===
+# Thêm watchtower service
 cat <<EOF >> $OUTPUT_FILE
   watchtower:
     image: containrrr/watchtower
@@ -151,34 +149,32 @@ docker compose -f docker-compose.generated.yml up -d
 echo "=============================="
 echo "Containers đang chạy. Bắt đầu chạy blockcastd init cho từng container..."
 
-# === Bước 11: Init và lấy location ===
-counter=1
+# === Bước 11: Init, lấy Register URL và IP proxy ===
+rm -f ../container_data.txt  # Clear file để ghi mới đúng format
+
 while IFS="|" read -r container_name proxy_line; do
     echo "=============================="
     echo "Khởi tạo: $container_name"
     echo "Proxy: $proxy_line"
     echo "=============================="
 
-    # Chạy blockcastd init
-    docker compose -f docker-compose.generated.yml exec -T $container_name /usr/bin/blockcastd init || echo "blockcastd init failed"
+    # Chạy blockcastd init và capture output
+    init_output=$(docker compose -f docker-compose.generated.yml exec -T $container_name /usr/bin/blockcastd init 2>&1) || echo "blockcastd init failed"
 
-    # Lấy location thông qua proxy
-    username=$(echo "$proxy_line" | cut -d':' -f1)
-    pass_ip_port=$(echo "$proxy_line" | cut -d':' -f2-)
-    password=$(echo "$pass_ip_port" | cut -d'@' -f1)
-    ip_port=$(echo "$pass_ip_port" | cut -d'@' -f2)
-    ip=$(echo "$ip_port" | cut -d':' -f1)
-    port=$(echo "$ip_port" | cut -d':' -f2)
+    # Parse Register URL từ init_output
+    register_url=$(echo "$init_output" | grep -i "https://app.blockcast.network/register" | head -n1 | awk '{$1=$1};1')
+    if [ -z "$register_url" ]; then
+        register_url="N/A"
+    fi
 
-    location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
-        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
-        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
+    # Lấy proxy IP từ proxy_line
+    ip_port=$(echo "$proxy_line" | cut -d'@' -f2)
+    proxy_ip=$(echo "$ip_port" | cut -d':' -f1)
 
-    # Cập nhật dữ liệu container_data.txt
-    echo "$container_name|$proxy_line|$location" >> ../container_data.txt
+    # Ghi register_url|proxy_ip
+    echo "$register_url|$proxy_ip" >> ../container_data.txt
 
-    counter=$((counter + 1))
-done < ../container_data.txt
+done < <(cut -d'|' -f1,2 ../container_data.txt)
 
 echo "=============================="
 echo "Hoàn tất! Thông tin đã được lưu vào container_data.txt"
