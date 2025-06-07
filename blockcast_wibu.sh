@@ -62,37 +62,40 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     project_name="blockcast_${instance_id}"
     repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
 
+    register_url="ERROR"
+    location="ERROR"
+
     if [ -d "${repo_dir}" ]; then
         cd "${repo_dir}" || exit 1
 
         echo "🔗 [Instance ${instance_id}] Getting register URL..."
         register_url=$(docker compose -p "${project_name}" \
-            exec -e HTTP_PROXY="http://${proxy_line}" \
-                 -e HTTPS_PROXY="http://${proxy_line}" \
-                 blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
+            exec -T -e HTTP_PROXY="http://${proxy_line}" \
+                    -e HTTPS_PROXY="http://${proxy_line}" \
+                    blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
         if [ -z "$register_url" ]; then
             register_url="ERROR"
         fi
 
         echo "🌍 [Instance ${instance_id}] Getting location info..."
         location=$(docker compose -p "${project_name}" \
-            exec -e HTTP_PROXY="http://${proxy_line}" \
-                 -e HTTPS_PROXY="http://${proxy_line}" \
-                 blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
+            exec -T -e HTTP_PROXY="http://${proxy_line}" \
+                    -e HTTPS_PROXY="http://${proxy_line}" \
+                    blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
         if [ -z "$location" ]; then
             location="ERROR"
         fi
-
-        echo "${register_url}|${location}" >> "${OUTPUT_FILE}"
-
-        echo "✅ [Instance ${instance_id}] Done:"
-        echo "${register_url}|${location}"
     else
         echo "⚠️  [Instance ${instance_id}] Container chưa setup hoặc chưa chạy. Ghi lỗi."
-        echo "ERROR|ERROR" >> "${OUTPUT_FILE}"
     fi
 
+    # ✅ Dù có lỗi vẫn luôn ghi 1 dòng cho mỗi container
+    echo "${register_url}|${location}" >> "${OUTPUT_FILE}"
+
+    echo "✅ [Instance ${instance_id}] Done:"
+    echo "${register_url}|${location}"
     echo "-----------------------------"
+
     cd "${SCRIPT_DIR}" || exit 1
     ((instance_id++))
 done < "${SCRIPT_DIR}/proxy.txt"
