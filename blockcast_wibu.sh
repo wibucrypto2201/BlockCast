@@ -89,7 +89,7 @@ max_containers=${max_containers:-9999}
 # === Bước 9: Generate docker-compose.generated.yml ===
 INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
-rm -f ../container_data.txt
+rm -f ../container_data_tmp.txt
 
 echo "services:" > $OUTPUT_FILE
 
@@ -125,8 +125,8 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
-    # Ghi container_name + proxy_line để bước sau init
-    echo "$container_name|$proxy_line" >> ../container_data.txt
+    # Ghi container_name|proxy_line vào file tạm container_data_tmp.txt
+    echo "$container_name|$proxy_line" >> ../container_data_tmp.txt
 
     counter=$((counter + 1))
 done < "$INPUT_FILE"
@@ -149,8 +149,8 @@ docker compose -f docker-compose.generated.yml up -d
 echo "=============================="
 echo "Containers đang chạy. Bắt đầu chạy blockcastd init cho từng container..."
 
-# === Bước 11: Init, lấy Register URL và IP proxy ===
-rm -f ../container_data.txt  # Clear file để ghi mới đúng format
+# === Bước 11: Init, lấy Register URL và location từ proxy ===
+rm -f ../container_data.txt  # Clear file để ghi kết quả cuối
 
 while IFS="|" read -r container_name proxy_line; do
     echo "=============================="
@@ -167,14 +167,30 @@ while IFS="|" read -r container_name proxy_line; do
         register_url="N/A"
     fi
 
-    # Lấy proxy IP từ proxy_line
-    ip_port=$(echo "$proxy_line" | cut -d'@' -f2)
-    proxy_ip=$(echo "$ip_port" | cut -d':' -f1)
+    # Parse proxy info
+    username=$(echo "$proxy_line" | cut -d':' -f1)
+    pass_ip_port=$(echo "$proxy_line" | cut -d':' -f2-)
+    password=$(echo "$pass_ip_port" | cut -d'@' -f1)
+    ip_port=$(echo "$pass_ip_port" | cut -d'@' -f2)
+    ip=$(echo "$ip_port" | cut -d':' -f1)
+    port=$(echo "$ip_port" | cut -d':' -f2)
 
-    # Ghi register_url|proxy_ip
-    echo "$register_url|$proxy_ip" >> ../container_data.txt
+    # Lấy location từ proxy
+    location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
+        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
+        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
 
-done < <(cut -d'|' -f1,2 ../container_data.txt)
+    if [ -z "$location" ]; then
+        location="N/A"
+    fi
+
+    # Ghi register_url|location
+    echo "$register_url|$location" >> ../container_data.txt
+
+done < ../container_data_tmp.txt
+
+# Xoá file tạm
+rm -f ../container_data_tmp.txt
 
 echo "=============================="
 echo "Hoàn tất! Thông tin đã được lưu vào container_data.txt"
