@@ -84,23 +84,25 @@ for ((i=1; i<=container_count; i++)); do
     ip_port=$(echo "$password_ip_port" | cut -d'@' -f2)
 
     container_name="beacon_node_$i"
+    override_file="docker-compose.override.yml"
+
+    echo "🚀 Creating docker-compose.override.yml for $container_name..."
+    cat > "$override_file" <<EOF
+services:
+  blockcastd:
+    environment:
+      - http_proxy=http://$username:$password@$ip_port
+      - https_proxy=http://$username:$password@$ip_port
+EOF
 
     echo "🚀 Starting container $container_name with proxy $proxy..."
-
-    (
-        export HTTP_PROXY="http://$username:$password@$ip_port"
-        export HTTPS_PROXY="http://$username:$password@$ip_port"
-        docker compose -p "$container_name" up -d --build
-    )
+    docker compose -p "$container_name" up -d --build
 
     echo "⚡ Waiting a few seconds for container $container_name to initialize..."
     sleep 10
 
-    echo "🔧 Initializing Blockcast node in container $container_name with proxy..."
-    register_output=$(docker compose -p "$container_name" exec -T \
-        -e HTTP_PROXY="http://$username:$password@$ip_port" \
-        -e HTTPS_PROXY="http://$username:$password@$ip_port" \
-        blockcastd blockcastd init 2>/dev/null)
+    echo "🔧 Initializing Blockcast node in container $container_name..."
+    register_output=$(docker compose -p "$container_name" exec -T blockcastd blockcastd init 2>/dev/null)
     register_url=$(echo "$register_output" | grep -Eo 'http[s]?://[^ ]+' | head -n1)
 
     if [ -z "$register_url" ]; then
@@ -108,10 +110,7 @@ for ((i=1; i<=container_count; i++)); do
     fi
 
     echo "🌐 Fetching location info from container $container_name using proxy..."
-    location_info=$(docker compose -p "$container_name" exec -T \
-        -e HTTP_PROXY="http://$username:$password@$ip_port" \
-        -e HTTPS_PROXY="http://$username:$password@$ip_port" \
-        blockcastd curl -x "http://$username:$password@$ip_port" -s https://ipinfo.io | \
+    location_info=$(docker compose -p "$container_name" exec -T blockcastd curl -x "http://$username:$password@$ip_port" -s https://ipinfo.io | \
         jq -r '.city, .region, .country, .loc' | paste -sd ", ")
 
     if [ -z "$location_info" ]; then
