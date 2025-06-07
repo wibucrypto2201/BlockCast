@@ -85,13 +85,18 @@ docker pull blockcast/cdn_gateway_go:stable
 read -p "Nhập số lượng container cần chạy (Enter để chạy hết proxy.txt): " max_containers
 max_containers=${max_containers:-9999}
 
-# === Bước 9: Xử lý proxy.txt và khởi tạo containers ===
-counter=1
-rm -f ../container_data.txt
+# === Bước 9: Generate docker-compose.generated.yml ===
+INPUT_FILE="../proxy.txt"
+OUTPUT_FILE="docker-compose.generated.yml"
 
+echo "version: '3.8'" > $OUTPUT_FILE
+echo "" >> $OUTPUT_FILE
+echo "services:" >> $OUTPUT_FILE
+
+counter=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     if [ "$counter" -gt "$max_containers" ]; then
-        echo "Đã chạy đủ số lượng container yêu cầu: $max_containers"
+        echo "Đã generate đủ số lượng container yêu cầu: $max_containers"
         break
     fi
 
@@ -104,32 +109,39 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
     container_name="blockcastd_$counter"
 
-    echo "=============================="
-    echo "Khởi tạo container: $container_name"
-    echo "Proxy: $username:$password@$ip:$port"
-    echo "=============================="
+    cat <<EOF >> $OUTPUT_FILE
+  $container_name:
+    image: blockcast/cdn_gateway_go:stable
+    container_name: $container_name
+    environment:
+      - HTTP_PROXY=http://$username:$password@$ip:$port
+      - HTTPS_PROXY=http://$username:$password@$ip:$port
+    command: /usr/bin/blockcastd -logtostderr=true -v=0
+    volumes:
+      - \${HOME}/.blockcast/certs:/var/opt/magma/certs
+      - \${HOME}/.blockcast/snowflake:/etc/snowflake
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
 
-    # === Bước 9.1: Tạo container mới với proxy ===
-    docker run -d \
-        --name $container_name \
-        -e HTTP_PROXY="http://$username:$password@$ip:$port" \
-        -e HTTPS_PROXY="http://$username:$password@$ip:$port" \
-        blockcast/cdn_gateway_go:stable
-
-    # === Bước 9.2: blockcastd init ===
-    docker exec -i $container_name blockcastd init || echo "blockcastd init failed"
-
-    # === Bước 9.3: Lấy thông tin location thông qua proxy ===
-    location=$(docker exec -i $container_name \
-        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
-        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
-
-    # === Bước 9.4: Ghi dữ liệu container vào file container_data.txt ===
-    echo "$container_name|$proxy_line|$location" >> ../container_data.txt
+EOF
 
     counter=$((counter + 1))
-done < ../proxy.txt
+done < "$INPUT_FILE"
+
+# === Thêm service watchtower vào file YAML ===
+cat <<EOF >> $OUTPUT_FILE
+  watchtower:
+    image: containrrr/watchtower
+    environment:
+      - WATCHTOWER_LABEL_ENABLE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+EOF
+
+echo "✅ Đã generate $OUTPUT_FILE thành công!"
+
+# === Bước 10: Chạy containers ===
+docker compose -f docker-compose.generated.yml up -d
 
 echo "=============================="
-echo "Tất cả containers đã được khởi chạy."
-echo "Thông tin được lưu trong container_data.txt"
+echo "Tất cả containers đã được khởi chạy từ docker-compose.generated.yml!"
