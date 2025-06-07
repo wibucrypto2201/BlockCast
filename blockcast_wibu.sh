@@ -1,10 +1,3 @@
-#!/bin/bash
-
-# blockcast_wibu.sh
-# Author: Grimoire+ (OpenAI)
-# Description: Clone repo, pull, up container, get register URL + location
-#              và xuất ra blockcast_data.txt với format: register_url|location
-
 REPO_URL="https://github.com/wibucrypto2201/beacon-docker-compose.git"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 OUTPUT_FILE="${SCRIPT_DIR}/blockcast_data.txt"
