@@ -24,20 +24,24 @@ else
     echo "✅ Docker already installed."
 fi
 
-# 3️⃣ Clone repository và cd vào thư mục
+# 3️⃣ Clone repository nếu chưa tồn tại
 if [ ! -d "beacon-docker-compose" ]; then
     echo "📥 Cloning beacon-docker-compose repository..."
     git clone https://github.com/Blockcast/beacon-docker-compose.git
+else
+    echo "✅ beacon-docker-compose repository already exists."
 fi
 
 # 4️⃣ Check proxy.txt trước khi cd
-if [ -f "proxy.txt" ]; then
-    echo "✅ proxy.txt already exists in the main folder. Copying to beacon-docker-compose..."
-    cp proxy.txt beacon-docker-compose/proxy.txt
-elif [ -f "beacon-docker-compose/proxy.txt" ]; then
+if [ -f "../proxy.txt" ]; then
+    echo "✅ Found proxy.txt in the parent folder. Copying to beacon-docker-compose..."
+    cp ../proxy.txt ./beacon-docker-compose/proxy.txt
+elif [ -f "proxy.txt" ]; then
     echo "✅ proxy.txt already in beacon-docker-compose folder."
+elif [ -f "./beacon-docker-compose/proxy.txt" ]; then
+    echo "✅ proxy.txt already exists in beacon-docker-compose folder."
 else
-    echo "❌ proxy.txt not found! Please create proxy.txt in the main folder or inside beacon-docker-compose."
+    echo "❌ proxy.txt not found! Please put proxy.txt in either the main folder or in beacon-docker-compose."
     exit 1
 fi
 
@@ -54,6 +58,9 @@ if [ ! -f "proxy.txt" ]; then
 fi
 
 mapfile -t proxies < proxy.txt
+
+echo "🔎 Found ${#proxies[@]} proxies."
+printf '%s\n' "${proxies[@]}"
 
 if [ "${#proxies[@]}" -lt "$container_count" ]; then
     echo "❌ Not enough proxies in proxy.txt! Found ${#proxies[@]}, need $container_count."
