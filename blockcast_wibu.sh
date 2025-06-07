@@ -1,105 +1,86 @@
 #!/bin/bash
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# === Bước 1: Cập nhật hệ thống ===
+sudo apt-get update && sudo apt-get upgrade -y
 
-echo "👉 Updating system and installing dependencies..."
-sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -yq
+# === Bước 2: Cài đặt các gói cần thiết ===
+sudo apt install -y \
+    curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop \
+    nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip
 
-packages=(curl iptables build-essential git wget lz4 jq make gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip jq)
-for package in "${packages[@]}"; do
-    if ! dpkg -s "$package" &>/dev/null; then
-        echo "🔧 Installing $package..."
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq "$package"
-    else
-        echo "✅ $package already installed."
-    fi
+# === Bước 3: Gỡ bỏ các gói Docker cũ ===
+for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
+    sudo apt-get remove -y $pkg
 done
 
-if ! command -v docker &>/dev/null; then
-    echo "🚀 Installing Docker..."
-    curl -fsSL https://get.docker.com | sh
-else
-    echo "✅ Docker already installed."
-fi
+# === Bước 4: Cài đặt Docker chính thức ===
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-if [ ! -d "$SCRIPT_DIR/beacon-docker-compose" ]; then
-    echo "📥 Cloning beacon-docker-compose repository..."
-    git clone https://github.com/Blockcast/beacon-docker-compose.git "$SCRIPT_DIR/beacon-docker-compose"
-else
-    echo "✅ beacon-docker-compose repository already exists."
-fi
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-if [ -f "$SCRIPT_DIR/proxy.txt" ]; then
-    echo "✅ Found proxy.txt in the script folder."
-else
-    echo "❌ proxy.txt not found! Please create proxy.txt with format user:pass@ip:port (1 per line)."
-    exit 1
-fi
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-mapfile -t proxies < "$SCRIPT_DIR/proxy.txt"
-echo "🔎 Found ${#proxies[@]} proxies."
-printf '%s\n' "${proxies[@]}"
+# === Bước 5: Kiểm tra Docker ===
+sudo docker run hello-world
+sudo systemctl enable docker
+sudo systemctl restart docker
 
-read -p "⛓️  Enter the number of containers you want to run: " container_count
-if [ "${#proxies[@]}" -lt "$container_count" ]; then
-    echo "❌ Not enough proxies! Found ${#proxies[@]}, need $container_count."
-    exit 1
-fi
+# === Bước 6: Clone Blockcast repository ===
+git clone https://github.com/Blockcast/beacon-docker-compose.git
+cd beacon-docker-compose
 
-cd "$SCRIPT_DIR/beacon-docker-compose" || exit 1
+# === Bước 7: Kéo image mới nhất ===
+docker compose pull
 
-if grep -q 'container_name:' docker-compose.yml; then
-    echo "⚡ Removing all 'container_name:' entries..."
-    sed -i '/container_name:/d' docker-compose.yml
-fi
+# === Bước 8: Xử lý proxy.txt và khởi tạo containers ===
+counter=1
+rm -f ../container_data.txt
 
-output_file="$SCRIPT_DIR/container_data.txt"
-echo "" > "$output_file"
+while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
+    username=$(echo "$proxy_line" | cut -d':' -f1)
+    pass_ip_port=$(echo "$proxy_line" | cut -d':' -f2-)
+    password=$(echo "$pass_ip_port" | cut -d'@' -f1)
+    ip_port=$(echo "$pass_ip_port" | cut -d'@' -f2)
+    ip=$(echo "$ip_port" | cut -d':' -f1)
+    port=$(echo "$ip_port" | cut -d':' -f2)
 
-for ((i=1; i<=container_count; i++)); do
-    proxy="${proxies[$((i-1))]}"
-    username=$(echo "$proxy" | cut -d':' -f1)
-    password_ip_port=$(echo "$proxy" | cut -d':' -f2-)
-    password=$(echo "$password_ip_port" | cut -d'@' -f1)
-    ip_port=$(echo "$password_ip_port" | cut -d'@' -f2)
+    container_name="blockcastd_$counter"
 
-    container_name="beacon_node_$i"
-    override_file="docker-compose.override.yml"
+    echo "=============================="
+    echo "Khởi tạo container: $container_name"
+    echo "Proxy: $username:$password@$ip:$port"
+    echo "=============================="
 
-    echo "⚡ Generating docker-compose.override.yml for $container_name..."
-    cat > "$override_file" <<EOF
-services:
-  blockcastd:
-    environment:
-      - http_proxy=http://$username:$password@$ip_port
-      - https_proxy=http://$username:$password@$ip_port
-  tinyproxy:
-    image: vimagick/tinyproxy
-    environment:
-      - PROXY_USER=$username
-      - PROXY_PASS=$password
-    ports:
-      - "8888"
-EOF
+    # === Bước 8.1: Tạo container mới với proxy ===
+    docker compose run -d \
+        --name $container_name \
+        -e HTTP_PROXY="http://$username:$password@$ip:$port" \
+        -e HTTPS_PROXY="http://$username:$password@$ip:$port" \
+        blockcastd
 
-    echo "🚀 Starting container $container_name with proxy $proxy..."
-    docker compose -p "$container_name" up -d --build
+    # === Bước 8.2: blockcastd init ===
+    docker compose exec $container_name blockcastd init
 
-    echo "⚡ Waiting a few seconds for container $container_name to initialize..."
-    sleep 10
+    # === Bước 8.3: Lấy thông tin location thông qua proxy ===
+    location=$(docker compose exec $container_name \
+        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
+        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
 
-    echo "🔧 Initializing Blockcast node in container $container_name..."
-    register_output=$(docker compose -p "$container_name" exec -T blockcastd blockcastd init 2>/dev/null)
-    register_url=$(echo "$register_output" | grep -Eo 'http[s]?://[^ ]+' | head -n1)
-    if [ -z "$register_url" ]; then register_url="N/A"; fi
+    # === Bước 8.4: Ghi dữ liệu container vào file container_data.txt ===
+    echo "$container_name|$proxy_line|$location" >> ../container_data.txt
 
-    echo "🌐 Fetching IP info from container $container_name using proxy..."
-    location_info=$(docker compose -p "$container_name" exec -T blockcastd curl -x "http://$username:$password@$ip_port" -s https://ipinfo.io | \
-        jq -r '.city, .region, .country, .loc' | paste -sd ", ")
-    if [ -z "$location_info" ]; then location_info="N/A"; fi
+    counter=$((counter + 1))
+done < ../proxy.txt
 
-    echo "$register_url | $location_info" >> "$output_file"
-    echo "✅ Container $container_name done."
-done
-
-echo "🎉 All containers initialized. Check $output_file for results!"
+echo "=============================="
+echo "Tất cả containers đã được khởi chạy."
+echo "Thông tin được lưu trong container_data.txt"
