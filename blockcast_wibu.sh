@@ -57,11 +57,19 @@ fi
 # 7️⃣ cd vào thư mục repo
 cd beacon-docker-compose || exit 1
 
-# 8️⃣ Tải và chạy blockcast_wibu.sh (wget)
+# 8️⃣ Tự động comment hoặc xoá container_name để tránh conflict
+if grep -q 'container_name: blockcastd' docker-compose.yml; then
+    echo "⚡ Removing 'container_name: blockcastd' from docker-compose.yml to avoid conflict."
+    sed -i '/container_name: blockcastd/s/^/# /' docker-compose.yml
+else
+    echo "✅ No 'container_name: blockcastd' found — no change needed."
+fi
+
+# 9️⃣ Tải và chạy blockcast_wibu.sh (wget)
 echo "⚡ Downloading and running blockcast_wibu.sh..."
 wget -qO- https://raw.githubusercontent.com/wibucrypto2201/BlockCast/refs/heads/main/blockcast_wibu.sh | bash
 
-# 9️⃣ Tạo và chạy container
+# 🔟 Tạo và chạy container
 output_file="../container_data.txt"
 echo "" > "$output_file"  # Clear output
 
