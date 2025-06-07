@@ -30,23 +30,29 @@ if [ ! -d "beacon-docker-compose" ]; then
     git clone https://github.com/Blockcast/beacon-docker-compose.git
 fi
 
-# 4️⃣ Copy proxy.txt nếu nằm ở ngoài
-if [ -f "../proxy.txt" ]; then
-    echo "🔄 Moving proxy.txt into beacon-docker-compose folder..."
-    mv ../proxy.txt ./beacon-docker-compose/proxy.txt
-elif [ -f "proxy.txt" ]; then
+# 4️⃣ Check proxy.txt trước khi cd
+if [ -f "proxy.txt" ]; then
+    echo "✅ proxy.txt already exists in the main folder. Copying to beacon-docker-compose..."
+    cp proxy.txt beacon-docker-compose/proxy.txt
+elif [ -f "beacon-docker-compose/proxy.txt" ]; then
     echo "✅ proxy.txt already in beacon-docker-compose folder."
 else
-    echo "❌ proxy.txt not found! Please create it in the main folder or inside beacon-docker-compose."
+    echo "❌ proxy.txt not found! Please create proxy.txt in the main folder or inside beacon-docker-compose."
     exit 1
 fi
 
+# 5️⃣ cd vào thư mục repo
 cd beacon-docker-compose || exit 1
 
-# 5️⃣ Input số lượng container
+# 6️⃣ Input số lượng container
 read -p "⛓️  Enter the number of containers you want to run: " container_count
 
-# 6️⃣ Đọc proxy từ file proxy.txt
+# 7️⃣ Đọc proxy từ file proxy.txt
+if [ ! -f "proxy.txt" ]; then
+    echo "❌ proxy.txt not found inside beacon-docker-compose!"
+    exit 1
+fi
+
 mapfile -t proxies < proxy.txt
 
 if [ "${#proxies[@]}" -lt "$container_count" ]; then
@@ -54,11 +60,11 @@ if [ "${#proxies[@]}" -lt "$container_count" ]; then
     exit 1
 fi
 
-# 7️⃣ Tải và chạy blockcast_wibu.sh (wget)
+# 8️⃣ Tải và chạy blockcast_wibu.sh (wget)
 echo "⚡ Downloading and running blockcast_wibu.sh..."
 wget -qO- https://raw.githubusercontent.com/wibucrypto2201/BlockCast/refs/heads/main/blockcast_wibu.sh | bash
 
-# 8️⃣ Tạo và chạy container
+# 9️⃣ Tạo và chạy container
 output_file="../container_data.txt"
 echo "" > "$output_file"  # Clear output
 
@@ -73,7 +79,6 @@ for ((i=1; i<=container_count; i++)); do
 
     echo "🚀 Starting container $container_name with proxy $proxy..."
 
-    # Start container (mỗi container có project riêng)
     docker compose -p "$container_name" up -d --build \
         --env HTTP_PROXY="http://$username:$password@$ip_port" \
         --env HTTPS_PROXY="http://$username:$password@$ip_port"
@@ -81,7 +86,6 @@ for ((i=1; i<=container_count; i++)); do
     echo "⚡ Waiting a few seconds for container $container_name to initialize..."
     sleep 10
 
-    # Init blockcastd
     echo "🔧 Initializing Blockcast node in container $container_name..."
     register_output=$(docker compose -p "$container_name" exec -T blockcastd blockcastd init 2>/dev/null)
     register_url=$(echo "$register_output" | grep -Eo 'http[s]?://[^ ]+' | head -n1)
@@ -90,7 +94,6 @@ for ((i=1; i<=container_count; i++)); do
         register_url="N/A"
     fi
 
-    # Get IP info (on host)
     echo "🌐 Fetching location info..."
     location_info=$(curl -s https://ipinfo.io | jq -r '.city, .region, .country, .loc' | paste -sd ", ")
 
@@ -98,7 +101,6 @@ for ((i=1; i<=container_count; i++)); do
         location_info="N/A"
     fi
 
-    # Save to file
     echo "$register_url | $location_info" >> "$output_file"
 
     echo "✅ Container $container_name: Registered URL and Location info saved."
