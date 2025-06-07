@@ -17,13 +17,14 @@ fi
 
 echo "" > "${OUTPUT_FILE}"   # Clear output file
 
+# 2️⃣ Phase 1: Setup container
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     host_port=$((8000 + instance_id))
     project_name="blockcast_${instance_id}"
     repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
 
-    echo "🔎 [Instance ${instance_id}] Đang xử lý..."
+    echo "🔎 [Instance ${instance_id}] Đang setup container..."
 
     # Clone repo nếu chưa có
     if [ -d "${repo_dir}" ]; then
@@ -43,37 +44,56 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     HOST_PORT=$host_port \
     docker compose -p "${project_name}" up -d
 
-    sleep 5  # Wait a bit for container to initialize
-
-    echo "🔗 [Instance ${instance_id}] Getting register URL..."
-    register_url=$(docker compose -p "${project_name}" \
-        exec -e HTTP_PROXY="http://${proxy_line}" \
-             -e HTTPS_PROXY="http://${proxy_line}" \
-             blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
-    if [ -z "$register_url" ]; then
-        register_url="ERROR"
-    fi
-
-    echo "🌍 [Instance ${instance_id}] Getting location info..."
-    location=$(docker compose -p "${project_name}" \
-        exec -e HTTP_PROXY="http://${proxy_line}" \
-             -e HTTPS_PROXY="http://${proxy_line}" \
-             blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
-    if [ -z "$location" ]; then
-        location="ERROR"
-    fi
-
-    echo "${register_url}|${location}" >> "${OUTPUT_FILE}"
-
-    echo "✅ [Instance ${instance_id}] Done:"
-    echo "${register_url}|${location}"
+    echo "✅ [Instance ${instance_id}] Container setup done!"
     echo "-----------------------------"
 
-    # QUAY LẠI THƯ MỤC GỐC
     cd "${SCRIPT_DIR}" || exit 1
-
     ((instance_id++))
 done < "${SCRIPT_DIR}/proxy.txt"
 
-echo "🎉 Tất cả container đã được khởi chạy thành công!"
+echo "⏳ Đang chờ container khởi chạy hoàn tất..."
+sleep 10  # Cho container ổn định
+
+# 3️⃣ Phase 2: Get register URL + location
+instance_id=1
+while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
+    project_name="blockcast_${instance_id}"
+    repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
+
+    if [ -d "${repo_dir}" ]; then
+        cd "${repo_dir}" || exit 1
+
+        echo "🔗 [Instance ${instance_id}] Getting register URL..."
+        register_url=$(docker compose -p "${project_name}" \
+            exec -e HTTP_PROXY="http://${proxy_line}" \
+                 -e HTTPS_PROXY="http://${proxy_line}" \
+                 blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
+        if [ -z "$register_url" ]; then
+            register_url="ERROR"
+        fi
+
+        echo "🌍 [Instance ${instance_id}] Getting location info..."
+        location=$(docker compose -p "${project_name}" \
+            exec -e HTTP_PROXY="http://${proxy_line}" \
+                 -e HTTPS_PROXY="http://${proxy_line}" \
+                 blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
+        if [ -z "$location" ]; then
+            location="ERROR"
+        fi
+
+        echo "${register_url}|${location}" >> "${OUTPUT_FILE}"
+
+        echo "✅ [Instance ${instance_id}] Done:"
+        echo "${register_url}|${location}"
+    else
+        echo "⚠️  [Instance ${instance_id}] Container chưa setup hoặc chưa chạy. Ghi lỗi."
+        echo "ERROR|ERROR" >> "${OUTPUT_FILE}"
+    fi
+
+    echo "-----------------------------"
+    cd "${SCRIPT_DIR}" || exit 1
+    ((instance_id++))
+done < "${SCRIPT_DIR}/proxy.txt"
+
+echo "🎉 Tất cả container đã được khởi chạy và lấy thông tin thành công!"
 echo "📦 Dữ liệu đã được lưu tại: ${OUTPUT_FILE}"
