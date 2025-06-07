@@ -26,7 +26,7 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
     echo "🔎 [Instance ${instance_id}] Đang setup container..."
 
-    # Clone repo nếu chưa có
+    # Clone repo
     if [ -d "${repo_dir}" ]; then
         echo "⚠️  [Instance ${instance_id}] Repo đã tồn tại — đang xóa để clone lại..."
         rm -rf "${repo_dir}"
@@ -51,8 +51,8 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     ((instance_id++))
 done < "${SCRIPT_DIR}/proxy.txt"
 
-echo "⏳ Đang chờ container khởi chạy hoàn tất..."
-sleep 10  # Cho container ổn định
+echo "⏳ Đang chờ tất cả container khởi chạy hoàn tất..."
+sleep 10  # Để container ổn định
 
 # 3️⃣ Phase 2: Get register URL + location
 instance_id=1
