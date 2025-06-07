@@ -3,7 +3,6 @@
 REPO_URL="https://github.com/wibucrypto2201/beacon-docker-compose.git"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# 1️⃣ Kiểm tra proxy.txt tồn tại
 if [ ! -f "${SCRIPT_DIR}/proxy.txt" ]; then
     echo "❌ Error: proxy.txt không tìm thấy! Vui lòng đặt file proxy.txt cùng thư mục với blockcast_wibu.sh"
     exit 1
@@ -11,18 +10,15 @@ fi
 
 instance_id=1
 while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
-    # Parse port từ proxy_line (user:pass@ip:port)
     proxy_port=$(echo "$proxy_line" | awk -F':' '{print $NF}')
     project_name="blockcast_${instance_id}"
     repo_dir="${SCRIPT_DIR}/beacon-docker-compose-${instance_id}"
 
-    # Xoá repo cũ nếu tồn tại
     if [ -d "${repo_dir}" ]; then
         echo "⚠️  Repo ${repo_dir} đã tồn tại — đang xóa để clone lại..."
         rm -rf "${repo_dir}"
     fi
 
-    # Clone repo mới
     git clone "$REPO_URL" "${repo_dir}"
     cd "${repo_dir}" || exit 1
 
