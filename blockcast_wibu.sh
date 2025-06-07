@@ -90,8 +90,7 @@ max_containers=${max_containers:-9999}
 INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
 
-# Clear file tạm container_data_tmp.txt
-rm -f ../container_data_tmp.txt
+rm -f ../container_data_tmp.txt  # clear file tạm
 
 echo "services:" > $OUTPUT_FILE
 
@@ -127,7 +126,6 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
-    # Append container_name và proxy_line để đảm bảo tất cả container được lưu
     echo "$container_name|$proxy_line" >> ../container_data_tmp.txt
 
     counter=$((counter + 1))
@@ -152,9 +150,9 @@ echo "=============================="
 echo "Containers đang chạy. Bắt đầu chạy blockcastd init cho từng container..."
 
 # === Bước 11: Init, lấy Register URL và location từ proxy ===
-rm -f ../container_data.txt  # Clear file kết quả cuối
+rm -f ../container_data.txt  # Clear file kết quả
 
-while IFS="|" read -r container_name proxy_line; do
+while IFS="|" read -r container_name proxy_line || [[ -n "$container_name" ]]; do
     echo "=============================="
     echo "Khởi tạo: $container_name"
     echo "Proxy: $proxy_line"
@@ -168,27 +166,25 @@ while IFS="|" read -r container_name proxy_line; do
     ip=$(echo "$ip_port" | cut -d':' -f1)
     port=$(echo "$ip_port" | cut -d':' -f2)
 
-    # Chạy blockcastd init (container sẽ tự dùng HTTP_PROXY nếu app support)
+    # Chạy blockcastd init
     init_output=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
         /usr/bin/blockcastd init 2>&1) || echo "blockcastd init failed"
 
-    # Parse Register URL từ init_output
+    # Parse Register URL
     register_url=$(echo "$init_output" | grep -i "https://app.blockcast.network/register" | head -n1 | awk '{$1=$1};1')
     if [ -z "$register_url" ]; then
         register_url="N/A"
     fi
 
-    # Lấy location từ proxy (bằng curl)
-    location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
-        curl -x http://$username:$password@$ip:$port -s --fail https://ipinfo.io 2>/dev/null | \
+    # Lấy location từ proxy trên VPS
+    location=$(curl -x http://$username:$password@$ip:$port -s --fail https://ipinfo.io 2>/dev/null | \
         jq -r '.city, .region, .country, .loc' | paste -sd "," -) || location="N/A"
 
-    # Ghi register_url|location
+    # Ghi ra container_data.txt
     echo "$register_url|$location" >> ../container_data.txt
 
 done < ../container_data_tmp.txt
 
-# Xoá file tạm
 rm -f ../container_data_tmp.txt
 
 echo "=============================="
