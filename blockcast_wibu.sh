@@ -79,10 +79,10 @@ fi
 cd beacon-docker-compose
 
 # === Bước 7: Kéo image mới nhất ===
-docker compose pull
+docker pull blockcast/cdn_gateway_go:stable
 
 # === Bước 8: Hỏi số lượng container cần chạy ===
-read -p "Nhập số lượng container cần chạy (hoặc Enter để chạy toàn bộ proxy.txt): " max_containers
+read -p "Nhập số lượng container cần chạy (Enter để chạy hết proxy.txt): " max_containers
 max_containers=${max_containers:-9999}
 
 # === Bước 9: Xử lý proxy.txt và khởi tạo containers ===
@@ -109,19 +109,18 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     echo "Proxy: $username:$password@$ip:$port"
     echo "=============================="
 
-    # === Bước 9.1: Dùng docker run thay vì docker compose exec ===
-    # Khởi động container
+    # === Bước 9.1: Tạo container mới với proxy ===
     docker run -d \
         --name $container_name \
         -e HTTP_PROXY="http://$username:$password@$ip:$port" \
         -e HTTPS_PROXY="http://$username:$password@$ip:$port" \
         blockcast/cdn_gateway_go:stable
 
-    # === Bước 9.2: blockcastd init (dùng docker exec -i -T) ===
-    docker exec -i -T $container_name blockcastd init || echo "blockcastd init failed"
+    # === Bước 9.2: blockcastd init ===
+    docker exec -i $container_name blockcastd init || echo "blockcastd init failed"
 
     # === Bước 9.3: Lấy thông tin location thông qua proxy ===
-    location=$(docker exec -i -T $container_name \
+    location=$(docker exec -i $container_name \
         curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
         jq -r '.city, .region, .country, .loc' | paste -sd "," -)
 
