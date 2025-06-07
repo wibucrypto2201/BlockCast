@@ -30,14 +30,18 @@ if [ ! -d "beacon-docker-compose" ]; then
     git clone https://github.com/Blockcast/beacon-docker-compose.git
 fi
 
-cd beacon-docker-compose || exit 1
-
-# 4️⃣ Kiểm tra file proxy.txt
-if [ ! -f "proxy.txt" ]; then
-    echo "❌ proxy.txt not found in beacon-docker-compose folder!"
-    echo "👉 Please create beacon-docker-compose/proxy.txt with format user:pass@ip:port (1 proxy per line)."
+# 4️⃣ Copy proxy.txt nếu nằm ở ngoài
+if [ -f "../proxy.txt" ]; then
+    echo "🔄 Moving proxy.txt into beacon-docker-compose folder..."
+    mv ../proxy.txt ./beacon-docker-compose/proxy.txt
+elif [ -f "proxy.txt" ]; then
+    echo "✅ proxy.txt already in beacon-docker-compose folder."
+else
+    echo "❌ proxy.txt not found! Please create it in the main folder or inside beacon-docker-compose."
     exit 1
 fi
+
+cd beacon-docker-compose || exit 1
 
 # 5️⃣ Input số lượng container
 read -p "⛓️  Enter the number of containers you want to run: " container_count
