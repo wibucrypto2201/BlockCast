@@ -3,6 +3,7 @@
 REPO_URL="https://github.com/wibucrypto2201/beacon-docker-compose.git"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# 1️⃣ Check proxy.txt tồn tại
 if [ ! -f "${SCRIPT_DIR}/proxy.txt" ]; then
     echo "❌ Error: proxy.txt không tìm thấy! Vui lòng đặt file proxy.txt cùng thư mục với blockcast_wibu.sh"
     exit 1
