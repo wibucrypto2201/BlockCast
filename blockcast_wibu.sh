@@ -181,7 +181,7 @@ while IFS="|" read -r container_name proxy_line || [[ -n "$container_name" ]]; d
         jq -r '.city, .region, .country, .loc' | paste -sd "," -) || location="N/A"
 
     # Ghi ra container_data.txt
-    echo "$register_url|$location" >> ../container_data.txt
+    echo "$container_name|$register_url|$location" >> ../container_data.txt
 
 done < ../container_data_tmp.txt
 
