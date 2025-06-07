@@ -96,16 +96,23 @@ for ((i=1; i<=container_count; i++)); do
     echo "⚡ Waiting a few seconds for container $container_name to initialize..."
     sleep 10
 
-    echo "🔧 Initializing Blockcast node in container $container_name..."
-    register_output=$(docker compose -p "$container_name" exec -T blockcastd blockcastd init 2>/dev/null)
+    echo "🔧 Initializing Blockcast node in container $container_name with proxy..."
+    register_output=$(docker compose -p "$container_name" exec -T \
+        -e HTTP_PROXY="http://$username:$password@$ip_port" \
+        -e HTTPS_PROXY="http://$username:$password@$ip_port" \
+        blockcastd blockcastd init 2>/dev/null)
     register_url=$(echo "$register_output" | grep -Eo 'http[s]?://[^ ]+' | head -n1)
 
     if [ -z "$register_url" ]; then
         register_url="N/A"
     fi
 
-    echo "🌐 Fetching location info from container $container_name..."
-    location_info=$(docker compose -p "$container_name" exec -T blockcastd curl -s https://ipinfo.io | jq -r '.city, .region, .country, .loc' | paste -sd ", ")
+    echo "🌐 Fetching location info from container $container_name using proxy..."
+    location_info=$(docker compose -p "$container_name" exec -T \
+        -e HTTP_PROXY="http://$username:$password@$ip_port" \
+        -e HTTPS_PROXY="http://$username:$password@$ip_port" \
+        blockcastd curl -x "http://$username:$password@$ip_port" -s https://ipinfo.io | \
+        jq -r '.city, .region, .country, .loc' | paste -sd ", ")
 
     if [ -z "$location_info" ]; then
         location_info="N/A"
