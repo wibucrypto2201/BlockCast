@@ -157,15 +157,6 @@ while IFS="|" read -r container_name proxy_line; do
     echo "Proxy: $proxy_line"
     echo "=============================="
 
-    # Chạy blockcastd init và capture output
-    init_output=$(docker compose -f docker-compose.generated.yml exec -T $container_name /usr/bin/blockcastd init 2>&1) || echo "blockcastd init failed"
-
-    # Parse Register URL từ init_output
-    register_url=$(echo "$init_output" | grep -i "https://app.blockcast.network/register" | head -n1 | awk '{$1=$1};1')
-    if [ -z "$register_url" ]; then
-        register_url="N/A"
-    fi
-
     # Parse proxy info
     username=$(echo "$proxy_line" | cut -d':' -f1)
     pass_ip_port=$(echo "$proxy_line" | cut -d':' -f2-)
@@ -174,7 +165,17 @@ while IFS="|" read -r container_name proxy_line; do
     ip=$(echo "$ip_port" | cut -d':' -f1)
     port=$(echo "$ip_port" | cut -d':' -f2)
 
-    # Lấy location từ proxy
+    # Chạy blockcastd init (container sẽ dùng HTTP_PROXY đã set nếu app support)
+    init_output=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
+        /usr/bin/blockcastd init 2>&1) || echo "blockcastd init failed"
+
+    # Parse Register URL từ init_output
+    register_url=$(echo "$init_output" | grep -i "https://app.blockcast.network/register" | head -n1 | awk '{$1=$1};1')
+    if [ -z "$register_url" ]; then
+        register_url="N/A"
+    fi
+
+    # Lấy location từ proxy (bằng curl)
     location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
         curl -x http://$username:$password@$ip:$port -s --fail https://ipinfo.io 2>/dev/null | \
         jq -r '.city, .region, .country, .loc' | paste -sd "," -) || location="N/A"
