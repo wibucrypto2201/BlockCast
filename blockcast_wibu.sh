@@ -89,7 +89,7 @@ max_containers=${max_containers:-9999}
 # === Bước 9: Generate docker-compose.generated.yml ===
 INPUT_FILE="../proxy.txt"
 OUTPUT_FILE="docker-compose.generated.yml"
-rm -f ../container_data_tmp.txt
+> ../container_data_tmp.txt  # clear file tạm
 
 echo "services:" > $OUTPUT_FILE
 
@@ -125,7 +125,6 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
 EOF
 
-    # Ghi container_name|proxy_line vào file tạm container_data_tmp.txt
     echo "$container_name|$proxy_line" >> ../container_data_tmp.txt
 
     counter=$((counter + 1))
