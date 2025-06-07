@@ -31,13 +31,12 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
         rm -rf "${repo_dir}"
     fi
     git clone "$REPO_URL" "${repo_dir}"
+
     cd "${repo_dir}" || exit 1
 
-    # Pull image
     echo "🔄 [Instance ${instance_id}] Pulling latest images..."
     docker compose pull
 
-    # Up container
     echo "🚀 [Instance ${instance_id}] Starting container..."
     INSTANCE_ID=$instance_id \
     PROXY_AUTH=$proxy_line \
@@ -46,16 +45,20 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
 
     sleep 5  # Wait a bit for container to initialize
 
-    # Get register URL
     echo "🔗 [Instance ${instance_id}] Getting register URL..."
-    register_url=$(docker compose -p "${project_name}" exec blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
+    register_url=$(docker compose -p "${project_name}" \
+        exec -e HTTP_PROXY="http://${proxy_line}" \
+             -e HTTPS_PROXY="http://${proxy_line}" \
+             blockcastd blockcastd init 2>/dev/null | grep -Eo 'http[s]?://[^[:space:]]*')
     if [ -z "$register_url" ]; then
         register_url="ERROR"
     fi
 
-    # Get location info
     echo "🌍 [Instance ${instance_id}] Getting location info..."
-    location=$(docker compose -p "${project_name}" exec blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
+    location=$(docker compose -p "${project_name}" \
+        exec -e HTTP_PROXY="http://${proxy_line}" \
+             -e HTTPS_PROXY="http://${proxy_line}" \
+             blockcastd curl -s https://ipinfo.io | jq -r '[.city, .region, .country, .loc] | join(", ")' 2>/dev/null)
     if [ -z "$location" ]; then
         location="ERROR"
     fi
@@ -65,6 +68,9 @@ while IFS= read -r proxy_line || [[ -n "$proxy_line" ]]; do
     echo "✅ [Instance ${instance_id}] Done:"
     echo "${register_url}|${location}"
     echo "-----------------------------"
+
+    # QUAY LẠI THƯ MỤC GỐC
+    cd "${SCRIPT_DIR}" || exit 1
 
     ((instance_id++))
 done < "${SCRIPT_DIR}/proxy.txt"
