@@ -177,12 +177,8 @@ while IFS="|" read -r container_name proxy_line; do
 
     # Lấy location từ proxy
     location=$(docker compose -f docker-compose.generated.yml exec -T $container_name \
-        curl -x http://$username:$password@$ip:$port -s https://ipinfo.io | \
-        jq -r '.city, .region, .country, .loc' | paste -sd "," -)
-
-    if [ -z "$location" ]; then
-        location="N/A"
-    fi
+        curl -x http://$username:$password@$ip:$port -s --fail https://ipinfo.io 2>/dev/null | \
+        jq -r '.city, .region, .country, .loc' | paste -sd "," -) || location="N/A"
 
     # Ghi register_url|location
     echo "$register_url|$location" >> ../container_data.txt
